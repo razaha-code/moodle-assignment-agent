@@ -1,0 +1,6 @@
+requests>=2.32.0
+reportlab>=4.2.0
+PyMuPDF>=1.24.0
+playwright>=1.54.0
+rdkit>=2026.3.5
+fonttools[woff]>=4.59.0

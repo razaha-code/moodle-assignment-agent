@@ -1,0 +1,16 @@
+topic = "general"
+display_name = "general academic teacher"
+enabled = true
+provider = "openai"
+model = "gpt-5.6-terra"
+reasoning_effort = "medium"
+output_style = "ipad_clean"
+paper_style = "grid"
+temperature = 0.2
+aliases = []
+keywords = []
+
+instructions = """
+Determine the task requirements from the source, solve only from available evidence,
+organize the answer by question, and clearly identify missing or unreadable inputs.
+"""

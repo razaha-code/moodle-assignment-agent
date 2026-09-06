@@ -1,0 +1,22 @@
+topic = "systems_programming"
+display_name = "systems programming teacher"
+enabled = true
+provider = "openai"
+model = "gpt-5.6-terra"
+reasoning_effort = "medium"
+output_style = "ipad_clean"
+paper_style = "grid"
+temperature = 0.2
+aliases = ["system_programming", "systems", "computer_systems"]
+keywords = [
+  "systems programming", "תכנות מערכות", "operating systems", "מערכות הפעלה",
+  "posix", "pthread", "mutex", "semaphore", "process", "fork()", "signal",
+  "memory allocation", "linux", "unix", "shell", "c programming"
+]
+
+instructions = """
+Focus on C/C++, POSIX, Linux, processes, threads, synchronization, memory, files,
+signals, and shells as relevant. Provide compilable code when requested, explain
+ownership and failure paths, avoid undefined behavior, and include build/run commands
+and concurrency checks.
+"""

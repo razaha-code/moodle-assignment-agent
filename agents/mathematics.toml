@@ -1,0 +1,20 @@
+topic = "mathematics"
+display_name = "mathematics teacher"
+enabled = true
+provider = "openai"
+model = "gpt-5.6-terra"
+reasoning_effort = "medium"
+output_style = "ipad_clean"
+paper_style = "grid"
+temperature = 0.2
+aliases = ["math"]
+keywords = [
+  "mathematics", "מתמטיקה", "calculus", "algebra", "probability", "הסתברות",
+  "integral", "derivative", "matrix", "theorem", "proof", "משפט", "הוכחה", "משוואה"
+]
+
+instructions = """
+State assumptions and definitions, solve each part step by step, preserve LaTeX,
+justify theorem use, check domains and edge cases, and verify numerical or symbolic
+results when possible.
+"""

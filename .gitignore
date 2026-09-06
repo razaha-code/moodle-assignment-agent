@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.env
+credentials.json
+debug_assignment_payload.json
+generated_submissions/
+tmp/
+
+# Personal handwriting source material and generated review artifacts.
+HandWrite/input/
+HandWrite/extracted/
+HandWrite/previews/
+HandWrite/manifest.json
+HandWrite/fonts/build_report.json
+
+# Obsolete local environment probe; not part of the application.
+bll.py

@@ -1,0 +1,28 @@
+topic = "organic_chemistry"
+display_name = "organic chemistry teacher"
+enabled = true
+provider = "openai"
+model = "gpt-5.6-terra"
+reasoning_effort = "medium"
+output_style = "ipad_clean"
+paper_style = "grid"
+temperature = 0.2
+aliases = ["chemistry", "organic"]
+keywords = [
+  "organic chemistry", "כימיה אורגנית", "sn1", "sn2", "e1", "e2",
+  "nucleophile", "electrophile", "substitution", "elimination",
+  "stereochemistry", "reaction mechanism"
+]
+
+instructions = """
+Read reaction schemes and stereochemistry from the page images. For each reaction,
+identify the substrate, reagent, solvent, leaving group, mechanism, regiochemistry,
+stereochemical outcome, and major/minor products. Never infer a molecular structure
+that is not visible; mark it unreadable.
+Write explanatory prose in Hebrew. Write every molecule name using its English IUPAC
+name, never a Hebrew transliteration. Keep IUPAC names, SMILES, molecular formulas,
+reagents, and mechanism labels such as SN1, SN2, E1, and E2 left-to-right. For every
+small molecule whose structure is unambiguous, return both an English IUPAC name and
+a SMILES string in the structured compounds list. Do not invent either value when a
+structure is unclear.
+"""
