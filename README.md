@@ -169,6 +169,40 @@ python moodle_agent.py --workflow-mode solve --handwriting-font gveret
 
 ## Rendering Pipeline
 
+### Genetic pedigrees
+
+Solutions that request a family pedigree return structured `pedigrees` alongside
+the answer HTML. People have stable IDs, sex (`M`, `F`, `U`), separate disease and
+carrier status (`true`, `false`, or `null`), parent IDs, and quoted evidence for
+each fact. Partnerships are explicit, including childless couples. The generator
+validates topology and evidence quotations, then asks the configured provider to
+check facts and completeness against the original question. Failed checks are
+fed back within the existing three-attempt limit; an invalid diagram is not a
+completed answer. This semantic review adds a model request for each answer that
+contains pedigrees and is not a guarantee of factual correctness.
+
+Pedigreejs 5.0.2, D3 7.9.0 and jQuery 3.7.1 are bundled locally under
+`assets/vendor/pedigree/`, with licenses, source URLs, and SHA-256 checksums in
+`versions.json`. Pedigreejs is GPL-3.0; the local copies retain their license
+notices. Pedigree drawing needs no CDN, editor, or browser storage. Existing
+MathJax loading for equations is unchanged.
+
+The renderer uses clean symbols and the selected handwriting font for labels.
+Each rendered diagram also produces `<basename>_pedigree_N.json` and `.svg` beside
+the PDF. Overlapping labels, unreadably large diagrams, missing nodes, and
+unsupported partial-parent multi-generation layouts produce a rendering error
+instead of a misleading PDF or text-only fallback. Large readable diagrams move
+to their own page. Older cached answers that require a pedigree are regenerated
+selectively; unrelated cached answers are preserved.
+
+Run all workflow and pedigree checks with `python -m unittest tests.test_moodle_workflow`.
+To include offline Chromium rendering checks in PowerShell:
+
+```powershell
+$env:RUN_PEDIGREE_BROWSER_TESTS = '1'
+python -m unittest tests.test_moodle_workflow
+```
+
 The canonical document output is now HTML, not plain text.
 
 1. The LLM generates a structured HTML fragment with headings, lists, LaTeX math, and mixed Hebrew/English text.

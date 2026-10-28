@@ -296,6 +296,8 @@ def process_assignment(args, config, reference_date: dt.date, assignment) -> dic
         "coverage_answered_count": len(final_document.answers),
         "coverage_missing_ids": final_document.missing_ids,
         "coverage_path": str(primary_coverage_path),
+        "pedigrees": {answer.id: [p.to_dict() for p in answer.pedigrees]
+                      for answer in final_document.answers if answer.pedigrees},
         "solver_stage_enabled": solver_stage,
         "solution_text_path": str(solution_text_path) if solution_text_path else None,
         "solution_html_path": str(solution_html_path) if solution_html_path else None,

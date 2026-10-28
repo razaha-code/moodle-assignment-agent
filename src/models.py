@@ -2,6 +2,8 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any
 
+from .pedigree import Pedigree
+
 
 class WorkflowError(RuntimeError):
     pass
@@ -187,6 +189,7 @@ class QuestionAnswer:
     id: str
     html: str
     compounds: tuple[CompoundReference, ...] = field(default_factory=tuple)
+    pedigrees: tuple[Pedigree, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -229,6 +232,7 @@ class GeneratedDocument:
             "answers": [
                 {
                     "id": answer.id,
+                    "pedigrees": [p.to_dict() for p in answer.pedigrees],
                     "compounds": [
                         {
                             "iupac_name": compound.iupac_name,

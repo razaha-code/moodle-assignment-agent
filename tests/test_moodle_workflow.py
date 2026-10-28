@@ -5,6 +5,7 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.test_pedigree import PedigreeTests, PedigreeBrowserTests
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -367,6 +368,18 @@ class MoodleWorkflowTests(unittest.TestCase):
         self.assertIn("fitDisplayMath", document)
         self.assertIn("math-scaled-to-page", document)
         self.assertIn("'Consolas', 'Courier New', monospace", document)
+
+    def test_handwriting_math_preserves_tex_and_waits_before_fitting(self):
+        formula = r"\(\frac{P(x_1)}{N^2}+\sqrt{9}\)"
+        document = output_module.build_rich_html_document(
+            "Math", f"<p>{formula}</p>", output_style="ipad_clean"
+        )
+        self.assertIn(formula, document)
+        self.assertIn("actualBoundingBoxAscent", document)
+        self.assertIn("if (!window.__handwritingFontRequired) return", document)
+        startup = document[document.index("MathJax.startup.promise.then"):]
+        self.assertLess(startup.index("await window.applyHandwritingMath()"),
+                        startup.index("window.fitDisplayMath()"))
 
     def test_ipad_clean_embeds_four_deterministic_glyph_variants(self):
         document = output_module.build_rich_html_document(

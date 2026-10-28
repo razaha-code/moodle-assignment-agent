@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .chemistry_render import compound_reference_html
+from .pedigree import PEDIGREE_PROMPT, PEDIGREE_VERSION, parse_pedigrees, pedigree_html, requires_pedigree
 from .llm_providers import LLMProviderRegistry
 from .manifest import (
     MANIFEST_SCHEMA_VERSION,
@@ -1047,6 +1048,32 @@ class LLMAnswerGenerator:
             raise WorkflowError("The LLM did not identify any questions in the assignment source.")
         return inventory
 
+    def _review_pedigrees(self, pedigrees, source, provider, resolved_model, reasoning_effort, answer_html=""):
+        if not pedigrees:
+            return []
+        review = provider.generate(
+            model=resolved_model,
+            system_content="Audit pedigree facts against the original assignment. Do not solve unrelated items.",
+            user_content=[{"type": "text", "text":
+                "Return JSON {\"errors\":[\"specific mismatch\"]}. Check completeness, sex, disease versus "
+                "carrier status, exact parents and partners, and invented individuals. Check every evidence "
+                "quote actually supports its fact, not merely that it occurs in the source. Brother means male. "
+                "Reject omitted relatives or hypothetical children. Check the accompanying explanation for "
+                "contradictions with the pedigree/source and reject any duplicate ASCII family diagram. "
+                "Empty errors means all facts agree.\n"
+                + source + "\n" + json.dumps([p.to_dict() for p in pedigrees], ensure_ascii=False)
+                + "\nAccompanying explanation:\n" + answer_html}],
+            temperature=0, reasoning_effort=reasoning_effort,
+            response_format={"type": "json_object"}, max_tokens=2000,
+        )
+        try:
+            errors = parse_json_object(review.content)["errors"]
+            if review.finish_reason == "length" or not isinstance(errors, list) or any(not isinstance(e, str) for e in errors):
+                raise ValueError("invalid review")
+            return errors
+        except (ValueError, KeyError, TypeError):
+            return ["Pedigree source verification did not return a complete valid review"]
+
     def generate_specialist_document(
         self,
         assignment: Assignment,
@@ -1078,6 +1105,7 @@ class LLMAnswerGenerator:
         answers_by_id: dict[str, QuestionAnswer] = {}
         attempts = {item.id: 0 for item in inventory}
         finish_reasons: list[str] = []
+        pedigree_errors: dict[str, list[str]] = {}
 
         grouped: list[list[QuestionItem]] = []
         for item in inventory:
@@ -1110,6 +1138,7 @@ class LLMAnswerGenerator:
                 "The compounds list is optional and should be empty outside relevant molecular questions. "
                 "Do not invent unreadable structures. Answer prose may be Hebrew when required by the domain "
                 "instructions, but IUPAC names and SMILES must remain English left-to-right.\n"
+                f"{PEDIGREE_PROMPT}\nPrior pedigree errors: {json.dumps(pedigree_errors, ensure_ascii=False)}\n"
                 f"Domain instructions:\n{specialist_instructions}\nRequested items:\n{item_descriptions}\n"
                 f"Extracted source text:\n{source_text}"
             )
@@ -1161,7 +1190,19 @@ class LLMAnswerGenerator:
                                 role=str(compound.get("role") or "").strip(),
                             )
                         )
-                answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, tuple(compounds))
+                try:
+                    pedigrees = parse_pedigrees(raw.get("pedigrees"), source_text)
+                    if mode == "solve" and requires_pedigree(expected_by_id[item_id].prompt_summary) and not pedigrees:
+                        raise ValueError("Structured pedigree required")
+                    errors = self._review_pedigrees(pedigrees, source_text, provider, resolved_model, reasoning_effort, answer_html)
+                    if errors:
+                        pedigree_errors[item_id] = errors
+                        continue
+                except (ValueError, TypeError) as exc:
+                    pedigree_errors[item_id] = [str(exc)]
+                    continue
+                pedigree_errors.pop(item_id, None)
+                answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, tuple(compounds), pedigrees)
 
         for batch in grouped:
             solve_batch(batch)
@@ -1193,6 +1234,7 @@ class LLMAnswerGenerator:
                 sections.append('<p class="missing-answer">הסעיף לא הושלם לאחר ניסיונות חוזרים.</p>')
             else:
                 sections.append(answer.html)
+                sections.extend(pedigree_html(p) for p in answer.pedigrees)
                 if answer.compounds:
                     sections.append('<aside class="compound-references" dir="ltr"><h4>Compounds</h4><ul>')
                     for compound in answer.compounds:
@@ -1245,6 +1287,18 @@ class LLMAnswerGenerator:
         finish_reasons: list[str] = []
         resumed = False
         manifest_fingerprint = self._manifest_fingerprint(manifest)
+        pedigree_errors: dict[str, list[str]] = {}
+        pedigree_sources = {
+            q.id: "\n".join(s.prompt_text for s in manifest.questions if s.top_level == q.top_level)
+            for q in manifest.questions
+        }
+
+        def read_pedigrees(raw, item_id):
+            pedigrees = parse_pedigrees(raw.get("pedigrees"), pedigree_sources[item_id])
+            if mode == "solve" and requires_pedigree(manifest_by_id[item_id].prompt_text) and not pedigrees:
+                raise ValueError("This item requires structured pedigrees; ASCII trees are not accepted")
+            return pedigrees
+
 
         if checkpoint_path.is_file():
             try:
@@ -1276,15 +1330,26 @@ class LLMAnswerGenerator:
                             if isinstance(compound, dict)
                         )
                         answer_html = normalize_html_fragment(str(raw.get("html") or ""))
+                        try:
+                            pedigrees = read_pedigrees(raw, item_id)
+                            if pedigrees and checkpoint.get("pedigree_version") != PEDIGREE_VERSION:
+                                raise ValueError("cached pedigree requires source verification")
+                        except (ValueError, TypeError) as exc:
+                            pedigree_errors[item_id] = [str(exc)]
+                            if checkpoint.get("pedigree_version") != PEDIGREE_VERSION:
+                                attempts[item_id] = 0
+                            continue
                         if is_acceptable_answer_html(answer_html, answer_language):
-                            answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, compounds)
+                            answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, compounds, pedigrees)
                     resumed = bool(answers_by_id)
             except (OSError, ValueError, TypeError, json.JSONDecodeError):
                 pass
 
         def save_checkpoint() -> None:
             payload = {
-                "schema_version": 1,
+                "schema_version": 2,
+                "pedigree_version": PEDIGREE_VERSION,
+                "pedigree_errors": pedigree_errors,
                 "source_hash": manifest.source_hash,
                 "manifest_fingerprint": manifest_fingerprint,
                 "model": resolved_model,
@@ -1296,6 +1361,7 @@ class LLMAnswerGenerator:
                     {
                         "id": answer.id,
                         "html": answer.html,
+                        "pedigrees": [p.to_dict() for p in answer.pedigrees],
                         "compounds": [
                             {"iupac_name": value.iupac_name, "smiles": value.smiles, "role": value.role}
                             for value in answer.compounds
@@ -1382,6 +1448,7 @@ class LLMAnswerGenerator:
                 "only the actual organic reactant/product structures in compounds; never list a reagent, base, "
                 "salt, or solvent as the product. Use valid isomeric SMILES. Flag unreadable source facts instead "
                 "of inventing them. IUPAC and SMILES remain English LTR.\n"
+                f"{PEDIGREE_PROMPT}\nPrior pedigree errors to correct: {json.dumps(pedigree_errors, ensure_ascii=False)}\n"
                 f"{language_instruction}Domain instructions:\n{specialist_instructions}\nManifest records:\n"
                 f"{json.dumps(records, ensure_ascii=False)}"
             )
@@ -1428,7 +1495,17 @@ class LLMAnswerGenerator:
                     for value in raw.get("compounds") or []
                     if isinstance(value, dict)
                 )
-                answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, compounds)
+                try:
+                    pedigrees = read_pedigrees(raw, item_id)
+                    errors = self._review_pedigrees(pedigrees, pedigree_sources[item_id], provider, resolved_model, reasoning_effort, answer_html)
+                    if errors:
+                        pedigree_errors[item_id] = errors
+                        continue
+                except (ValueError, TypeError) as exc:
+                    pedigree_errors[item_id] = [str(exc)]
+                    continue
+                pedigree_errors.pop(item_id, None)
+                answers_by_id[item_id] = QuestionAnswer(item_id, answer_html, compounds, pedigrees)
             save_checkpoint()
 
         for batch in grouped:
@@ -1460,6 +1537,7 @@ class LLMAnswerGenerator:
                 sections.append('<p class="missing-answer">הסעיף לא הושלם לאחר ניסיונות חוזרים.</p>')
             else:
                 sections.append(answer.html)
+                sections.extend(pedigree_html(p) for p in answer.pedigrees)
                 if answer.compounds:
                     sections.append('<aside class="compound-references" dir="ltr"><h4>Chemical structures</h4>')
                     for compound in answer.compounds:

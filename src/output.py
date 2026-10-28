@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Assignment
+from .pedigree import pedigree_resources
 
 try:
     from playwright.sync_api import Error as PlaywrightError
@@ -574,14 +575,16 @@ def build_rich_html_document(
         "|| families.every((family) => document.fonts.check(`16px \"${family}\"`));\n"
         "      }).catch(() => { window.__fontReady = false; });\n"
         "    });\n"
-        "    window.MathJax = {\n"
+        + Path(__file__).with_name("handwriting_math.js").read_text(encoding="utf-8")
+        + "    window.MathJax = {\n"
         "      tex: { inlineMath: [['\\\\(', '\\\\)'], ['$', '$']], displayMath: [['\\\\[', '\\\\]'], ['$$', '$$']] },\n"
         "      svg: { fontCache: 'global' },\n"
         "      options: { enableAssistiveMml: false },\n"
         "      startup: {\n"
         "        ready: () => {\n"
         "          MathJax.startup.defaultReady();\n"
-        "          MathJax.startup.promise.then(() => {\n"
+        "          MathJax.startup.promise.then(async () => {\n"
+        "            await window.applyHandwritingMath();\n"
         "            window.fitDisplayMath();\n"
         "            document.querySelectorAll('mjx-assistive-mml').forEach((element) => element.remove());\n"
         "            try {\n"
@@ -597,7 +600,8 @@ def build_rich_html_document(
         "    };\n"
         "  </script>\n"
         "  <script defer src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\"></script>\n"
-        "</head>\n"
+        + (pedigree_resources() if 'data-pedigree="' in body_html else "")
+        + "</head>\n"
         f"<body class=\"{body_class} paper-{profile.paper_style}\" "
         f"data-output-style=\"{profile.output_style}\" data-paper-style=\"{profile.paper_style}\" "
         f"data-handwriting-font=\"{profile.handwriting_font}\" "
@@ -675,6 +679,19 @@ def render_html_to_pdf(
                             f"MathJax or synthetic glyph variation did not finish: {glyph_error or exc}"
                         ) from exc
                     page.wait_for_timeout(1200)
+                if page.locator("[data-pedigree]").count():
+                    page.wait_for_function("window.__pedigreesReady || window.__pedigreeError", timeout=15000)
+                    pedigree_error = page.evaluate("window.__pedigreeError")
+                    if pedigree_error:
+                        raise RuntimeError(pedigree_error)
+                    diagrams = page.evaluate("""() => Array.from(document.querySelectorAll('[data-pedigree]')).map(el => ({
+                        data: JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(el.dataset.pedigree), c => c.charCodeAt(0)))),
+                        svg: el.querySelector('svg').outerHTML
+                    }))""")
+                    for index, diagram in enumerate(diagrams, 1):
+                        stem = html_path.with_name(f"{html_path.stem}_pedigree_{index}")
+                        stem.with_suffix(".json").write_text(json.dumps(diagram["data"], ensure_ascii=False, indent=2), encoding="utf-8")
+                        stem.with_suffix(".svg").write_text(diagram["svg"], encoding="utf-8")
                 page.pdf(
                     path=str(pdf_path),
                     format="A4",
@@ -684,11 +701,11 @@ def render_html_to_pdf(
                 browser.close()
             return "playwright"
         except Exception as exc:
-            if output_style == "ipad_clean":
-                raise RuntimeError(f"ipad_clean PDF rendering failed: {exc}") from exc
+            if output_style == "ipad_clean" or 'data-pedigree="' in html_path.read_text(encoding="utf-8"):
+                raise RuntimeError(f"Rich PDF rendering failed: {exc}") from exc
 
-    if output_style == "ipad_clean":
-        raise RuntimeError("ipad_clean PDF rendering requires Playwright and Chromium")
+    if output_style == "ipad_clean" or 'data-pedigree="' in html_path.read_text(encoding="utf-8"):
+        raise RuntimeError("Rich PDF rendering requires Playwright and Chromium")
 
     fallback_engine = build_answer_pdf(pdf_path, title, wrap_answer_text(fallback_text))
     return f"{fallback_engine}-fallback"

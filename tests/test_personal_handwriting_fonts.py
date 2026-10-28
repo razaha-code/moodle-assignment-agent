@@ -64,7 +64,7 @@ class PersonalHandwritingFontTests(unittest.TestCase):
             self.assertEqual([], report["fallback_codepoints"])
             self.assertEqual(22, SIDE_BEARING)
             self.assertEqual(SIDE_BEARING, report["side_bearing"])
-            self.assertEqual(1.18, WORD_SPACE_SCALE)
+            self.assertEqual(1.25, WORD_SPACE_SCALE)
             self.assertEqual(WORD_SPACE_SCALE, report["word_space_scale"])
             self.assertEqual(1, len(set(report["space_advances"])))
             base_font = TTFont(self.base_paths[0])

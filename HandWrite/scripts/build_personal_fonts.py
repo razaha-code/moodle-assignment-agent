@@ -26,7 +26,7 @@ FONT_SCALE = 50.0
 SIDE_BEARING = 22
 # Keep letters tight inside words, but leave a slightly clearer visual break
 # between adjacent words than the source font provides.
-WORD_SPACE_SCALE = 1.18
+WORD_SPACE_SCALE = 1.25
 PERSONAL_ALTERNATE_SUFFIXES = (".ss01", ".ss02")
 OPTIONAL_FALLBACK_CODEPOINTS = (0x05DA, 0x05DF)  # final kaf, final nun
 TOKEN_RE = re.compile(r"[MLCZ]|[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?")
